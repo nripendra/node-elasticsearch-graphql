@@ -4,9 +4,16 @@ import * as graphqlHTTP from 'express-graphql';
 import fetch from 'node-fetch';
 import GraphQLDateType from "./graphql-type-date";
 import GraphQLJSONType from "./graphql-type-json";
+import * as url from 'url';
 
+let ELASTIC_BASEURL = "http://localhost:9200";
 
-const ELASTIC_HOST = "localhost:9200";
+let argv = process.argv.slice(2) || [];
+var arg0 = argv[0] || '';
+var _url = url.parse(arg0);
+if(_url.host) {
+    ELASTIC_BASEURL = `${_url.protocol}//${_url.host}`;
+}
 
 var elasticTypeToGraphQLType = { 'text': 'String', 'float': 'Float', 'long': 'Int', 'boolean': 'Boolean', 'date': 'Date' };
 
@@ -53,6 +60,11 @@ class TypeBuilder {
     }
 }
 
+var resolveIndexPath = function (indexName: string, typeName: string) {
+    typeName = (typeName || '').trim();
+    return indexName + '/' + ((typeName != 'logs' && typeName) ? `_${typeName}/` : '');
+}
+
 var indexSearchResolver = function (indexName, typeName) {
     return async function (root, args, context, info) {
         args = args || {};
@@ -61,8 +73,8 @@ var indexSearchResolver = function (indexName, typeName) {
         info = info || {};
 
         var esQuery = args.esQuery;
-        let path = indexName + '/' + ((typeName != 'logs' && typeName) ? `_${typeName}/` : '');
-        let data = await (await fetch(`http://${ELASTIC_HOST}/${path}_search`, {
+        let path = resolveIndexPath(indexName, typeName);
+        let data = await (await fetch(`${ELASTIC_BASEURL}/${path}_search`, {
             headers: { "Content-Type": "application/json" },
             method: 'POST',
             body: JSON.stringify(esQuery)
@@ -81,8 +93,8 @@ var indexGetResolver = function (indexName, typeName) {
         info = info || {};
 
         var esQuery = { match: { _id: id } };
-        let path = indexName + '/' + ((typeName != 'logs' && typeName) ? `_${typeName}/` : '');
-        let data = await (await fetch(`http://${ELASTIC_HOST}/${path}_search?q=_id:${id}`)).json();
+        let path = resolveIndexPath(indexName, typeName);
+        let data = await (await fetch(`${ELASTIC_BASEURL}/${path}_search?q=_id:${id}`)).json();
 
         var result = data.hits.hits.map(hit => hit._source)[0];
         if (!result)
@@ -125,24 +137,33 @@ var SchemaBuilder = function (rootName) {
 const app = express();
 
 (async function () {
-    var response = await fetch(`http://${ELASTIC_HOST}/_cat/indices?h=index,store.size,health&bytes=k&format=json`);
+    var response = await fetch(`${ELASTIC_BASEURL}/_cat/indices?h=index,store.size,health&bytes=k&format=json`);
     var result = await response.json();
     var schemaBuilder = SchemaBuilder('Query');
     for (let indexInfo of result) {
-        let mappingsInfo = await (await fetch(`http://${ELASTIC_HOST}/${indexInfo.index}/_mapping`)).json();
+        let mappingsInfo = await (await fetch(`${ELASTIC_BASEURL}/${indexInfo.index}/_mapping`)).json();
         let mappingInfo = mappingsInfo[indexInfo.index];
         for (let type in mappingInfo.mappings) {
             schemaBuilder.addType(new TypeBuilder(indexInfo.index, type, false, mappingInfo.mappings[type].properties));
         }
     }
 
-
     var schemaDeclaration = `scalar Date
     scalar JSON
     ${schemaBuilder.build()}`;
 
     var resolver = schemaBuilder.getResolver();
-    (<any>resolver)['Date'] = GraphQLDateType;
+    (<any>resolver)['Date'] = {
+        __parseLiteral(val) {
+            return GraphQLDateType.parseLiteral(val);
+        },
+        __parseValue(val) {
+            return GraphQLDateType.parseValue(val);
+        },
+        __serialize(val) {
+            return GraphQLDateType.serialize(val);
+        }
+    };
     (<any>resolver)['JSON'] = {
         __parseLiteral(val) {
             return GraphQLJSONType.parseLiteral(val);
