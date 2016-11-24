@@ -1,5 +1,5 @@
 import { GraphQLScalarType } from 'graphql';
-import { Kind } from 'graphql/language';
+import { Kind } from 'graphql';
 
 function identity(value) {
   return value;
@@ -13,14 +13,13 @@ function parseLiteral(ast) {
     case Kind.INT:
     case Kind.FLOAT:
       return parseFloat(ast.value);
-    case Kind.OBJECT: {
+    case Kind.OBJECT:
       const value = Object.create(null);
       ast.fields.forEach((field) => {
         value[field.name.value] = parseLiteral(field.value);
       });
 
       return value;
-    }
     case Kind.LIST:
       return ast.values.map(parseLiteral);
     default:
@@ -30,10 +29,9 @@ function parseLiteral(ast) {
 
 export default new GraphQLScalarType({
   name: 'JSON',
-  description:
-    'The `JSON` scalar type represents JSON values as specified by ' +
-    '[ECMA-404](http://www.ecma-international.org/' +
-    'publications/files/ECMA-ST/ECMA-404.pdf).',
+  description: 'The `JSON` scalar type represents JSON values as specified by ' +
+  '[ECMA-404](http://www.ecma-international.org/' +
+  'publications/files/ECMA-ST/ECMA-404.pdf).',
   serialize: identity,
   parseValue: identity,
   parseLiteral,

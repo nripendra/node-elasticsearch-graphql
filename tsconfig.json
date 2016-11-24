@@ -3,6 +3,7 @@
         "module": "commonjs",
         "target": "es5",
         "noImplicitAny": false,
+        "noUnusedLocals": true,
         "inlineSources": true,
         "inlineSourceMap": true,
         "outDir": "./dist"

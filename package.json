@@ -4,7 +4,10 @@
   "description": "query elasticsearch using graphql",
   "main": "index.ts",
   "scripts": {
-    "test": "test"
+    "start": "node ./dist",
+    "build": "tsc -p .",
+    "test": "test",
+    "lint": "tslint --project ./tsconfig.json"
   },
   "keywords": [
     "elasticsearch",
@@ -28,5 +31,8 @@
     "graphql-tools": "^0.8.1",
     "graphql-tools-types": "^1.0.1",
     "node-fetch": "^1.6.3"
+  },
+  "devDependencies": {
+    "tslint": "^4.0.2"
   }
 }
