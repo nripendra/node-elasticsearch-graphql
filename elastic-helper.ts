@@ -8,11 +8,11 @@ export async function getAllIndices(baseUrl: string) {
 
 export async function getMappingInfo(baseUrl: string, indexName: string) {
     let mappingsInfo = await (await fetch(`${baseUrl}/${indexName}/_mapping`)).json();
-    return mappingsInfo[indexName];
+    return mappingsInfo[indexName] as { mappings: any };
 }
 
 export function indexSearchResolver(baseUrl: string, indexName: string, typeName: string) {
-    return async function(root: any, args: any, context: any, info: any) {
+    return async function (root: any, args: any, context: any, info: any) {
         args = args || {};
         context = context || {};
         info = info || {};
@@ -36,7 +36,7 @@ export function indexSearchResolver(baseUrl: string, indexName: string, typeName
 }
 
 export function indexGetResolver(baseUrl: string, indexName: string, typeName: string) {
-    return async function(root: any, args: any, context: any, info: any) {
+    return async function (root: any, args: any, context: any, info: any) {
         console.log('resolving');
         args = args || {};
         context = context || {};
