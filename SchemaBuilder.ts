@@ -2,6 +2,11 @@ import { getAllIndices, getMappingInfo } from './elastic-helper';
 import { makeExecutableSchema } from 'graphql-tools';
 import { SchemaParser } from './SchemaParser';
 
+interface ISchemaBuilderConfig {
+    getAllIndices(baseUrl: string): Promise<{ index: string }[]>;
+    getMappingInfo(baseUrl: string, indexName: string): Promise<{ mappings: any }>;
+}
+
 /**
  * schema = {
  *   types: {
@@ -26,8 +31,12 @@ import { SchemaParser } from './SchemaParser';
  */
 export class SchemaBuilder {
     private parser: SchemaParser;
-    constructor(private baseUrl: string) {
+    constructor(private baseUrl: string, private config?: ISchemaBuilderConfig) {
         this.parser = new SchemaParser(this.baseUrl);
+        this.config = this.config || {
+            getAllIndices: getAllIndices,
+            getMappingInfo: getMappingInfo
+        };
     }
 
     public get schemaTree() {
@@ -44,10 +53,10 @@ export class SchemaBuilder {
     }
 
     public async build() {
-        let indices = await getAllIndices(this.baseUrl);
+        let indices = await this.config.getAllIndices(this.baseUrl);
 
         for (let indexInfo of indices) {
-            let mappingsInfo = await getMappingInfo(this.baseUrl, indexInfo.index);
+            let mappingsInfo = await this.config.getMappingInfo(this.baseUrl, indexInfo.index);
             this.parser.parse(indexInfo.index, mappingsInfo);
         }
     }
