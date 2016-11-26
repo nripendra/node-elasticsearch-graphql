@@ -4,6 +4,7 @@ import * as url from 'url';
 import { SchemaBuilder } from './SchemaBuilder';
 
 let ELASTIC_BASEURL = 'http://localhost:9200';
+let PORT = 4000;
 
 let argv = process.argv.slice(2) || [];
 let arg0 = argv[0] || '';
@@ -12,9 +13,14 @@ if (_url.host) {
     ELASTIC_BASEURL = `${_url.protocol}//${_url.host}`;
 }
 
+let arg1 = parseInt(argv[1] || '', 10);
+if (arg1 > 0) {
+    PORT = arg1;
+}
+
 const app = express();
 
-(async function () {
+(async function() {
 
     let builder = new SchemaBuilder(ELASTIC_BASEURL);
 
@@ -22,7 +28,7 @@ const app = express();
         schema: await builder.build(),
         graphiql: true,
     }));
-    console.log('Now browse to localhost:4000/graphql');
+    console.log('Now browse to http://localhost:${PORT}/graphql');
 })().catch(e => console.log(e));
 
-app.listen(4000, () => console.log('Server started'));
+app.listen(PORT, () => console.log('Server started at ${PORT}'));
