@@ -18,13 +18,8 @@ const app = express();
 
     let builder = new SchemaBuilder(ELASTIC_BASEURL);
 
-    await builder.build();
-
-    // change the schemaTree as per requirement before calling makeExecutableSchema...
-    // builder.schemaTree.types ...
-
     app.use('/graphql', graphqlHTTP({
-        schema: builder.makeExecutableSchema(),
+        schema: await builder.build(),
         graphiql: true,
     }));
     console.log('Now browse to localhost:4000/graphql');

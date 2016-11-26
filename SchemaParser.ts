@@ -13,6 +13,16 @@ let elasticTypeToGraphQLType = {
     'date': 'Date'
 };
 
+/** A JSON based in memory representation of GraphQL schema. */
+export interface ISchemaTree {
+    types: any,
+    query: string,
+    args: any
+    resolvers: any,
+    scalars: GraphQLScalarType[],
+    toString: string
+}
+
 /**
  * schema = {
  *   types: {
@@ -36,10 +46,11 @@ let elasticTypeToGraphQLType = {
  * }
  */
 export class SchemaParser {
-    private _schema: any;
+    public schemaTree: ISchemaTree;
+    /** Downloads and parses elasticsearch index mapping metadata to build schema-tree */
     constructor(private baseUrl: string) {
         let _toString = this.toString.bind(this);
-        this._schema = {
+        this.schemaTree = {
             types: {
                 Query: {}
             },
@@ -53,6 +64,7 @@ export class SchemaParser {
         };
     }
 
+    /** Create schema types and queries based on mappings metadata of given schema */
     public parse(indexName: string, mappingInfo: { mappings: any }) {
 
         for (let type in mappingInfo.mappings) {
@@ -64,8 +76,8 @@ export class SchemaParser {
             }
             typeName = typeName.replace(/[^a-zA-Z0-9_]/, '_');
 
-            this._schema.types[typeName] = {};
-            this._schema.types[typeName + '_LIST'] = {
+            this.schemaTree.types[typeName] = {};
+            this.schemaTree.types[typeName + '_LIST'] = {
                 'totalCount': 'Int',
                 'from': 'Int',
                 'size': 'Int',
@@ -74,62 +86,55 @@ export class SchemaParser {
             };
 
             let props = mappingInfo.mappings[type].properties || {};
-            let kv = this._schema.types[typeName];
+            let kv = this.schemaTree.types[typeName];
             Object.keys(props).forEach(key => {
                 let k = key.replace(/[^a-zA-Z0-9_]/, '_');
                 let propType = props[key].type;
                 kv[k] = elasticTypeToGraphQLType[propType] || propType;
             });
 
-            this._schema.types.Query['all_' + typeName] = typeName + '_LIST';
-            this._schema.types.Query[typeName] = typeName;
-            this._schema.args['all_' + typeName] = [{
+            this.schemaTree.types.Query['all_' + typeName] = typeName + '_LIST';
+            this.schemaTree.types.Query[typeName] = typeName;
+            this.schemaTree.args['all_' + typeName] = [{
                 name: 'search',
                 type: 'JSON'
             }];
-            this._schema.args[typeName] = [{
+            this.schemaTree.args[typeName] = [{
                 name: 'id',
                 type: 'JSON'
             }];
 
             let searchResolver = indexSearchResolver(this.baseUrl, indexName, type);
-            this._schema.resolvers.Query['all_' + typeName] = searchResolver;
+            this.schemaTree.resolvers.Query['all_' + typeName] = searchResolver;
 
             let getResolver = indexGetResolver(this.baseUrl, indexName, type);
-            this._schema.resolvers.Query[typeName] = getResolver;
+            this.schemaTree.resolvers.Query[typeName] = getResolver;
         }
-        // this.schema;
     }
 
-    public get schemaTree() {
-        return this._schema;
-    }
-
+    /** Build schema defination string, using the type/schema defination language of GraphQL */
     public toString() {
         let lines = [];
 
-        for (let scalar of this._schema.scalars) {
+        for (let scalar of this.schemaTree.scalars) {
             lines.push(`scalar ${scalar.name}`);
         }
 
-        for (let type in this._schema.types) {
+        for (let type in this.schemaTree.types) {
             lines.push(`type ${type} {`);
-            lines.push(Object.keys(this._schema.types[type]).map(key => {
+            lines.push(Object.keys(this.schemaTree.types[type]).map(key => {
                 let normalizedKey = this.normalizeField(key);
-                let normalizedType = this.normalizeTypeName(this._schema.types[type][key]);
+                let normalizedType = this.normalizeTypeName(this.schemaTree.types[type][key]);
                 return `${normalizedKey} : ${normalizedType}`;
             }));
             lines.push('}');
         }
-        lines.push(`schema { query: ${this._schema.query}}`);
+        lines.push(`schema { query: ${this.schemaTree.query}}`);
 
         return lines.join('\n');;
     }
 
-    public get resolvers() {
-        return this._schema.resolvers;
-    }
-
+    /** Add a custom GraphQLScalarType. JSON and Date are supported by default */
     public addScalar(scalar: GraphQLScalarType | GraphQLScalarType[]) {
         let scalars: GraphQLScalarType[] = [];
         if (Array === scalar.constructor) {
@@ -141,13 +146,14 @@ export class SchemaParser {
         }
 
         for (let sc of scalars) {
-            this._schema.scalars.push(sc);
+            this.schemaTree.scalars.push(sc);
         }
     }
 
+    /** Convert GraphQLScalarType to the form that is understood by `graphql-tools` */
     public buildScalars() {
-        for (let sc of this._schema.scalars) {
-            this._schema.resolvers[sc.name] = {
+        for (let sc of this.schemaTree.scalars) {
+            this.schemaTree.resolvers[sc.name] = {
                 __parseLiteral(val) {
                     return sc.parseLiteral(val);
                 },
@@ -166,7 +172,7 @@ export class SchemaParser {
     }
 
     private normalizeField(field: string) {
-        let propArgs = this._schema.args[field];
+        let propArgs = this.schemaTree.args[field];
         if (propArgs && propArgs.length > 0) {
             let args = propArgs.map(arg => arg.name + ':' + arg.type).join(',');
             return `${field}(${args})`;

@@ -1,7 +1,9 @@
 import { getAllIndices, getMappingInfo } from './elastic-helper';
 import { makeExecutableSchema } from 'graphql-tools';
 import { SchemaParser } from './SchemaParser';
+import { GraphQLScalarType } from 'graphql';
 
+/** Configuration for schema-builder */
 interface ISchemaBuilderConfig {
     getAllIndices(baseUrl: string): Promise<{ index: string }[]>;
     getMappingInfo(baseUrl: string, indexName: string): Promise<{ mappings: any }>;
@@ -31,6 +33,8 @@ interface ISchemaBuilderConfig {
  */
 export class SchemaBuilder {
     private parser: SchemaParser;
+    private isParsed: boolean = false;
+    /** Builds schema from elasticsearch metadata */
     constructor(private baseUrl: string, private config?: ISchemaBuilderConfig) {
         this.parser = new SchemaParser(this.baseUrl);
         this.config = this.config || {
@@ -39,33 +43,32 @@ export class SchemaBuilder {
         };
     }
 
-    public get schemaTree() {
-        return this.parser.schemaTree;
-    }
-
-    public addScalar(scalar: {
-        name: string,
-        parseLiteral: (val: any) => any,
-        parseValue: (val: any) => any,
-        serialize: (val: any) => any
-    }) {
+    /** Add custom scalar types. GraphQLDateType, GraphQLJSONType are supported by default */
+    public addScalar(scalar: GraphQLScalarType | GraphQLScalarType[]) {
         this.parser.addScalar(scalar);
     }
 
-    public async build() {
+    /** Creates schema `tree` from elasticsearch indices. */
+    public async parse() {
+        this.isParsed = true;
         let indices = await this.config.getAllIndices(this.baseUrl);
 
         for (let indexInfo of indices) {
             let mappingsInfo = await this.config.getMappingInfo(this.baseUrl, indexInfo.index);
             this.parser.parse(indexInfo.index, mappingsInfo);
         }
+        return this.parser.schemaTree;
     }
 
-    public makeExecutableSchema() {
+    /** Creates executable schema that can be used with graphqlHTTP */
+    public async build() {
+        if (!this.isParsed) {
+            await this.parse();
+        }
         this.parser.buildScalars();
         return makeExecutableSchema({
             typeDefs: this.parser.toString(),
-            resolvers: this.parser.resolvers,
+            resolvers: this.parser.schemaTree.resolvers,
         });
     }
 }
